@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import time
 import uuid
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
@@ -19,8 +20,19 @@ SYSTEM_LANGUAGE_INSTRUCTION = os.environ.get(
     "SYSTEM_LANGUAGE_INSTRUCTION",
     "特に指定がない限り、日本語で簡潔に応答してください。",
 )
+MESSAGE_LOG_FILE = os.environ.get("MESSAGE_LOG_FILE", "vllm-proxy.jsonl")
 
 app = FastAPI()
+
+
+def log_input_messages(messages: List[Dict[str, Any]]) -> None:
+    for message in messages:
+        try:
+            with open(MESSAGE_LOG_FILE, "a", encoding="utf-8") as f:
+                f.write(json.dumps(message, ensure_ascii=False) + "\n")
+        except OSError as exc:
+            print(f"failed to write message log: {exc}", file=sys.stderr)
+            return
 
 
 def ensure_object_schema(schema: Any) -> Dict[str, Any]:
@@ -506,6 +518,7 @@ async def create_response(request: Request):
     chat_payload = build_chat_payload(req, stream=wants_stream)
     model = chat_payload["model"]
 
+    log_input_messages(chat_payload["messages"])
 
     if not wants_stream:
         async with httpx.AsyncClient(timeout=None) as client:
