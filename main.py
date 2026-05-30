@@ -25,13 +25,26 @@ MESSAGE_LOG_FILE = os.environ.get("MESSAGE_LOG_FILE", "vllm-proxy.jsonl")
 app = FastAPI()
 
 
-def log_input_messages(messages: List[Dict[str, Any]]) -> None:
+def write_message_log(entry: Dict[str, Any]) -> bool:
+    try:
+        with open(MESSAGE_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        print(f"failed to write message log: {exc}", file=sys.stderr)
+        return False
+
+    return True
+
+
+def log_messages(direction: str, messages: List[Dict[str, Any]]) -> None:
     for message in messages:
-        try:
-            with open(MESSAGE_LOG_FILE, "a", encoding="utf-8") as f:
-                f.write(json.dumps(message, ensure_ascii=False) + "\n")
-        except OSError as exc:
-            print(f"failed to write message log: {exc}", file=sys.stderr)
+        if not write_message_log({"direction": direction, "message": message}):
+            return
+
+
+def log_response_output(output: List[Dict[str, Any]]) -> None:
+    for item in output:
+        if not write_message_log({"direction": "output", "output": item}):
             return
 
 
@@ -518,7 +531,7 @@ async def create_response(request: Request):
     chat_payload = build_chat_payload(req, stream=wants_stream)
     model = chat_payload["model"]
 
-    log_input_messages(chat_payload["messages"])
+    log_messages("input", chat_payload["messages"])
 
     if not wants_stream:
         async with httpx.AsyncClient(timeout=None) as client:
@@ -548,6 +561,7 @@ async def create_response(request: Request):
             model=model,
             chat_response=chat_response,
         )
+        log_response_output(responses_response["output"])
         return JSONResponse(content=responses_response)
 
     client = httpx.AsyncClient(timeout=None)
@@ -772,19 +786,21 @@ async def create_response(request: Request):
                     }
                 )
 
+            final_output = finalize_stream_output(
+                text_parts=text_parts,
+                tool_call_states=tool_call_states,
+                output_order=output_order,
+                message_item_id=message_item_id,
+            )
             final_response = build_responses_response(
                 response_id=response_id,
                 created_at=created_at,
                 model=model,
                 status="completed",
-                output=finalize_stream_output(
-                    text_parts=text_parts,
-                    tool_call_states=tool_call_states,
-                    output_order=output_order,
-                    message_item_id=message_item_id,
-                ),
+                output=final_output,
                 usage=usage,
             )
+            log_response_output(final_output)
             yield sse_data({"type": "response.completed", "response": final_response})
             yield "data: [DONE]\n\n"
         finally:
