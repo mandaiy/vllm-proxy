@@ -15,6 +15,10 @@ DEFAULT_MODEL = os.environ.get(
     "VLLM_MODEL",
     "QuantTrio/Qwen3-Coder-30B-A3B-Instruct-AWQ",
 )
+SYSTEM_LANGUAGE_INSTRUCTION = os.environ.get(
+    "SYSTEM_LANGUAGE_INSTRUCTION",
+    "特に指定がない限り、日本語で簡潔に応答してください。",
+)
 
 app = FastAPI()
 
@@ -150,6 +154,13 @@ def parse_json_object(value: Any) -> Dict[str, Any]:
     return {}
 
 
+def stringify_tool_arguments(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+
+    return json.dumps(parse_json_object(value), ensure_ascii=False)
+
+
 def responses_input_to_chat_messages(input_value: Any) -> List[Dict[str, Any]]:
     """
     Convert Responses API-ish input into Chat Completions messages.
@@ -187,7 +198,7 @@ def responses_input_to_chat_messages(input_value: Any) -> List[Dict[str, Any]]:
                             "type": "function",
                             "function": {
                                 "name": item.get("name", ""),
-                                "arguments": parse_json_object(item.get("arguments", {})),
+                                "arguments": stringify_tool_arguments(item.get("arguments", {})),
                             },
                         }
                     ],
@@ -359,6 +370,14 @@ def build_chat_payload(req: Dict[str, Any], *, stream: bool) -> Dict[str, Any]:
     model = req.get("model") or DEFAULT_MODEL
 
     messages = responses_input_to_chat_messages(req.get("input", ""))
+    if SYSTEM_LANGUAGE_INSTRUCTION:
+        messages.insert(
+            0,
+            {
+                "role": "system",
+                "content": SYSTEM_LANGUAGE_INSTRUCTION,
+            },
+        )
     tools = normalize_tools_for_chat(req.get("tools", []))
 
     payload: Dict[str, Any] = {
