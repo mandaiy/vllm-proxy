@@ -3,12 +3,12 @@ import os
 import sys
 import time
 import uuid
-from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
+from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-
 
 VLLM_BASE_URL = os.environ.get("VLLM_BASE_URL", "http://127.0.0.1:8000/v1")
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", "dummy")
@@ -25,7 +25,7 @@ MESSAGE_LOG_FILE = os.environ.get("MESSAGE_LOG_FILE", "vllm-proxy.jsonl")
 app = FastAPI()
 
 
-def write_message_log(entry: Dict[str, Any]) -> bool:
+def write_message_log(entry: dict[str, Any]) -> bool:
     try:
         with open(MESSAGE_LOG_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -36,19 +36,19 @@ def write_message_log(entry: Dict[str, Any]) -> bool:
     return True
 
 
-def log_messages(direction: str, messages: List[Dict[str, Any]]) -> None:
+def log_messages(direction: str, messages: list[dict[str, Any]]) -> None:
     for message in messages:
         if not write_message_log({"direction": direction, "message": message}):
             return
 
 
-def log_response_output(output: List[Dict[str, Any]]) -> None:
+def log_response_output(output: list[dict[str, Any]]) -> None:
     for item in output:
         if not write_message_log({"direction": "output", "output": item}):
             return
 
 
-def ensure_object_schema(schema: Any) -> Dict[str, Any]:
+def ensure_object_schema(schema: Any) -> dict[str, Any]:
     if not isinstance(schema, dict):
         return {"type": "object", "properties": {}, "required": []}
 
@@ -66,17 +66,12 @@ def ensure_object_schema(schema: Any) -> Dict[str, Any]:
     return normalized
 
 
-def extract_tool_parameters(tool_like: Dict[str, Any]) -> Dict[str, Any]:
-    return ensure_object_schema(
-        tool_like.get("parameters")
-        or tool_like.get("input_schema")
-        or tool_like.get("schema")
-    )
+def extract_tool_parameters(tool_like: dict[str, Any]) -> dict[str, Any]:
+    return ensure_object_schema(tool_like.get("parameters") or tool_like.get("input_schema") or tool_like.get("schema"))
 
 
-def normalize_tool_for_chat(tool: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """
-    Convert various Responses/OpenAI-like tool schemas into Chat Completions tool format.
+def normalize_tool_for_chat(tool: dict[str, Any]) -> dict[str, Any] | None:
+    """Convert various Responses/OpenAI-like tool schemas into Chat Completions tool format.
 
     Chat Completions expected shape:
     {
@@ -122,7 +117,7 @@ def normalize_tool_for_chat(tool: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return None
 
 
-def normalize_tools_for_chat(tools: Any) -> List[Dict[str, Any]]:
+def normalize_tools_for_chat(tools: Any) -> list[dict[str, Any]]:
     if not isinstance(tools, list):
         return []
 
@@ -135,8 +130,7 @@ def normalize_tools_for_chat(tools: Any) -> List[Dict[str, Any]]:
 
 
 def extract_text_from_content(content: Any) -> str:
-    """
-    Responses API input content can be a string or a list of content parts.
+    """Responses API input content can be a string or a list of content parts.
     Convert common text parts into plain text.
     """
     if content is None:
@@ -163,7 +157,7 @@ def extract_text_from_content(content: Any) -> str:
     return str(content)
 
 
-def parse_json_object(value: Any) -> Dict[str, Any]:
+def parse_json_object(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
 
@@ -186,16 +180,15 @@ def stringify_tool_arguments(value: Any) -> str:
     return json.dumps(parse_json_object(value), ensure_ascii=False)
 
 
-def responses_input_to_chat_messages(input_value: Any) -> List[Dict[str, Any]]:
-    """
-    Convert Responses API-ish input into Chat Completions messages.
+def responses_input_to_chat_messages(input_value: Any) -> list[dict[str, Any]]:
+    """Convert Responses API-ish input into Chat Completions messages.
 
     Supports:
     - input: "hello"
     - input: [{role: "user", content: "..."}]
     - function_call_output items as tool results
     """
-    messages: List[Dict[str, Any]] = []
+    messages: list[dict[str, Any]] = []
 
     if isinstance(input_value, str):
         return [{"role": "user", "content": input_value}]
@@ -261,10 +254,10 @@ def responses_input_to_chat_messages(input_value: Any) -> List[Dict[str, Any]]:
     return messages
 
 
-def chat_tool_calls_to_responses_output(tool_calls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Convert Chat Completions tool_calls to Responses API-like function_call items.
-    """
+def chat_tool_calls_to_responses_output(
+    tool_calls: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Convert Chat Completions tool_calls to Responses API-like function_call items."""
     output = []
 
     for tc in tool_calls:
@@ -285,7 +278,7 @@ def chat_tool_calls_to_responses_output(tool_calls: List[Dict[str, Any]]) -> Lis
     return output
 
 
-def build_usage(usage: Dict[str, Any]) -> Dict[str, int]:
+def build_usage(usage: dict[str, Any]) -> dict[str, int]:
     return {
         "input_tokens": usage.get("prompt_tokens", 0),
         "output_tokens": usage.get("completion_tokens", 0),
@@ -299,10 +292,10 @@ def build_responses_response(
     created_at: int,
     model: str,
     status: str,
-    output: List[Dict[str, Any]],
-    usage: Dict[str, Any],
-) -> Dict[str, Any]:
-    output_text_parts: List[str] = []
+    output: list[dict[str, Any]],
+    usage: dict[str, Any],
+) -> dict[str, Any]:
+    output_text_parts: list[str] = []
     for item in output:
         if item.get("type") != "message":
             continue
@@ -326,18 +319,16 @@ def build_responses_response(
 def chat_message_to_responses_response(
     *,
     model: str,
-    chat_response: Dict[str, Any],
-) -> Dict[str, Any]:
-    """
-    Convert a vLLM Chat Completions response to a minimal Responses API-like response.
-    """
+    chat_response: dict[str, Any],
+) -> dict[str, Any]:
+    """Convert a vLLM Chat Completions response to a minimal Responses API-like response."""
     response_id = f"resp_{uuid.uuid4().hex}"
     created_at = int(time.time())
 
     choice = (chat_response.get("choices") or [{}])[0]
     message = choice.get("message", {}) or {}
 
-    output: List[Dict[str, Any]] = []
+    output: list[dict[str, Any]] = []
 
     tool_calls = message.get("tool_calls") or []
     if tool_calls:
@@ -391,7 +382,7 @@ def normalize_tool_choice(tool_choice: Any) -> Any:
     return "auto"
 
 
-def build_chat_payload(req: Dict[str, Any], *, stream: bool) -> Dict[str, Any]:
+def build_chat_payload(req: dict[str, Any], *, stream: bool) -> dict[str, Any]:
     model = req.get("model") or DEFAULT_MODEL
 
     messages = responses_input_to_chat_messages(req.get("input", ""))
@@ -405,7 +396,7 @@ def build_chat_payload(req: Dict[str, Any], *, stream: bool) -> Dict[str, Any]:
         )
     tools = normalize_tools_for_chat(req.get("tools", []))
 
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "model": model,
         "messages": messages,
         "stream": stream,
@@ -433,12 +424,12 @@ def build_chat_payload(req: Dict[str, Any], *, stream: bool) -> Dict[str, Any]:
     return payload
 
 
-def sse_data(payload: Dict[str, Any]) -> str:
+def sse_data(payload: dict[str, Any]) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-async def iter_sse_json(response: httpx.Response) -> AsyncIterator[Dict[str, Any]]:
-    data_lines: List[str] = []
+async def iter_sse_json(response: httpx.Response) -> AsyncIterator[dict[str, Any]]:
+    data_lines: list[str] = []
 
     async for line in response.aiter_lines():
         if line.startswith("data:"):
@@ -465,12 +456,12 @@ async def iter_sse_json(response: httpx.Response) -> AsyncIterator[Dict[str, Any
 
 def finalize_stream_output(
     *,
-    text_parts: List[str],
-    tool_call_states: Dict[int, Dict[str, Any]],
-    output_order: List[Tuple[str, int]],
+    text_parts: list[str],
+    tool_call_states: dict[int, dict[str, Any]],
+    output_order: list[tuple[str, int]],
     message_item_id: str,
-) -> List[Dict[str, Any]]:
-    output: List[Dict[str, Any]] = []
+) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
 
     for kind, index in output_order:
         if kind == "message":
@@ -508,9 +499,7 @@ def finalize_stream_output(
 
 @app.get("/v1/models")
 async def models():
-    """
-    Minimal /v1/models endpoint for clients that probe available models.
-    """
+    """Minimal /v1/models endpoint for clients that probe available models."""
     return {
         "object": "list",
         "data": [
@@ -597,12 +586,12 @@ async def create_response(request: Request):
         response_id = f"resp_{uuid.uuid4().hex}"
         created_at = int(time.time())
         message_item_id = f"msg_{uuid.uuid4().hex}"
-        text_parts: List[str] = []
-        tool_call_states: Dict[int, Dict[str, Any]] = {}
-        output_order: List[Tuple[str, int]] = []
-        usage: Dict[str, Any] = {}
+        text_parts: list[str] = []
+        tool_call_states: dict[int, dict[str, Any]] = {}
+        output_order: list[tuple[str, int]] = []
+        usage: dict[str, Any] = {}
         message_started = False
-        message_output_index: Optional[int] = None
+        message_output_index: int | None = None
 
         initial_response = build_responses_response(
             response_id=response_id,
@@ -649,7 +638,11 @@ async def create_response(request: Request):
                             "item_id": message_item_id,
                             "output_index": message_output_index,
                             "content_index": 0,
-                            "part": {"type": "output_text", "text": "", "annotations": []},
+                            "part": {
+                                "type": "output_text",
+                                "text": "",
+                                "annotations": [],
+                            },
                         }
                     )
 
@@ -715,34 +708,34 @@ async def create_response(request: Request):
             if message_started:
                 full_text = "".join(text_parts)
                 yield sse_data(
-                        {
-                            "type": "response.output_text.done",
-                            "item_id": message_item_id,
-                            "output_index": message_output_index,
-                            "content_index": 0,
-                            "text": full_text,
-                        }
-                    )
+                    {
+                        "type": "response.output_text.done",
+                        "item_id": message_item_id,
+                        "output_index": message_output_index,
+                        "content_index": 0,
+                        "text": full_text,
+                    }
+                )
                 yield sse_data(
-                        {
-                            "type": "response.content_part.done",
-                            "item_id": message_item_id,
-                            "output_index": message_output_index,
-                            "content_index": 0,
-                            "part": {
-                                "type": "output_text",
-                                "text": full_text,
+                    {
+                        "type": "response.content_part.done",
+                        "item_id": message_item_id,
+                        "output_index": message_output_index,
+                        "content_index": 0,
+                        "part": {
+                            "type": "output_text",
+                            "text": full_text,
                             "annotations": [],
                         },
                     }
                 )
                 yield sse_data(
-                        {
-                            "type": "response.output_item.done",
-                            "output_index": message_output_index,
-                            "item": {
-                                "type": "message",
-                                "id": message_item_id,
+                    {
+                        "type": "response.output_item.done",
+                        "output_index": message_output_index,
+                        "item": {
+                            "type": "message",
+                            "id": message_item_id,
                             "status": "completed",
                             "role": "assistant",
                             "content": [
