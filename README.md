@@ -1,19 +1,20 @@
 # vllm-proxy
 
-vLLM に対して、最小限の OpenAI 互換 Responses API を提供する薄いプロキシです。
+A thin vLLM wrapper that exposes a minimal OpenAI-compatible Responses API surface.
 
-## GitHub から uvx で実行する
+## Run from GitHub with uvx
 
-このプロジェクトは PyPI には公開せず、public GitHub repository から直接実行する想定です。
+This project is intended to run directly from the public GitHub repository,
+without publishing to PyPI.
 
 ```bash
 uvx --from git+https://github.com/mandaiy/vllm-proxy.git vllm-proxy
 ```
 
-デフォルトでは `127.0.0.1:8080` で listen し、リクエストを
-`http://127.0.0.1:8000/v1` へ転送します。
+By default, the proxy listens on `127.0.0.1:8080` and forwards requests to
+`http://127.0.0.1:8000/v1`.
 
-listen するアドレスとポートは CLI オプションでも指定できます。
+You can configure the bind address and port with CLI options.
 
 ```bash
 uvx --from git+https://github.com/mandaiy/vllm-proxy.git vllm-proxy \
@@ -21,25 +22,26 @@ uvx --from git+https://github.com/mandaiy/vllm-proxy.git vllm-proxy \
   --port 8080
 ```
 
-メッセージログはデフォルトでは出力しません。出力したい場合は
-`--message-log-file` で JSONL ファイルの保存先を指定します。
+Message logging is disabled by default. To enable it, pass a JSONL file path
+with `--message-log-file`.
 
 ```bash
 uvx --from git+https://github.com/mandaiy/vllm-proxy.git vllm-proxy \
   --message-log-file ~/.local/state/vllm-proxy/messages.jsonl
 ```
 
-ログファイルの一般的な保存先は実行環境によって異なります。
+Common log locations depend on the runtime environment.
 
-- ローカルの開発用途: プロジェクト外の一時ディレクトリや `./logs/`
-- ユーザー単位の CLI 実行: Linux では `~/.local/state/vllm-proxy/`、macOS では `~/Library/Logs/vllm-proxy/`
-- systemd などのサービス運用: stdout/stderr に流して journald やログ基盤で収集、または `/var/log/vllm-proxy/`
+- Local development: a temporary directory outside the repository, or `./logs/`
+- Per-user CLI usage: `~/.local/state/vllm-proxy/` on Linux, or `~/Library/Logs/vllm-proxy/` on macOS
+- Service deployment: stdout/stderr collected by journald or a logging backend, or `/var/log/vllm-proxy/`
 
-プロンプトや応答を含むため、共有リポジトリ内への保存は避けるのが無難です。
+Because message logs can contain prompts and responses, avoid writing them into
+shared repositories.
 
-## 設定
+## Configuration
 
-サーバー設定は環境変数でも指定できます。
+The server can also be configured with environment variables.
 
 | Variable | Default |
 | --- | --- |
@@ -52,7 +54,7 @@ uvx --from git+https://github.com/mandaiy/vllm-proxy.git vllm-proxy \
 | `SYSTEM_LANGUAGE_INSTRUCTION` | `特に指定がない限り、日本語で簡潔に応答してください。` |
 | `MESSAGE_LOG_FILE` | unset |
 
-実行例:
+Example:
 
 ```bash
 VLLM_BASE_URL=http://127.0.0.1:8000/v1 \
@@ -60,7 +62,7 @@ MESSAGE_LOG_FILE=~/.local/state/vllm-proxy/messages.jsonl \
   uvx --from git+https://github.com/mandaiy/vllm-proxy.git vllm-proxy
 ```
 
-## 開発
+## Development
 
 ```bash
 uv sync
