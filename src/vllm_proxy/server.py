@@ -20,14 +20,22 @@ SYSTEM_LANGUAGE_INSTRUCTION = os.environ.get(
     "SYSTEM_LANGUAGE_INSTRUCTION",
     "特に指定がない限り、日本語で簡潔に応答してください。",
 )
-MESSAGE_LOG_FILE = os.environ.get("MESSAGE_LOG_FILE", "vllm-proxy.jsonl")
+MESSAGE_LOG_FILE_ENV = "MESSAGE_LOG_FILE"
 
 app = FastAPI()
 
 
+def get_message_log_file() -> str | None:
+    return os.environ.get(MESSAGE_LOG_FILE_ENV)
+
+
 def write_message_log(entry: dict[str, Any]) -> bool:
+    message_log_file = get_message_log_file()
+    if not message_log_file:
+        return True
+
     try:
-        with open(MESSAGE_LOG_FILE, "a", encoding="utf-8") as f:
+        with open(message_log_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except OSError as exc:
         print(f"failed to write message log: {exc}", file=sys.stderr)
@@ -813,3 +821,33 @@ async def create_response(request: Request):
 @app.get("/health")
 async def health():
     return {"ok": True}
+
+
+def main() -> None:
+    import argparse
+
+    import uvicorn
+
+    parser = argparse.ArgumentParser(description="Run the vLLM Responses API proxy.")
+    parser.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
+    parser.add_argument(
+        "--reload",
+        action="store_true",
+        default=os.environ.get("RELOAD", "").lower() in {"1", "true", "yes"},
+    )
+    parser.add_argument(
+        "--message-log-file",
+        help="Write request/response message logs to this JSONL file. Disabled by default.",
+    )
+    args = parser.parse_args()
+
+    if args.message_log_file:
+        os.environ[MESSAGE_LOG_FILE_ENV] = args.message_log_file
+
+    uvicorn.run(
+        "vllm_proxy.server:app",
+        host=args.host,
+        port=args.port,
+        reload=args.reload,
+    )

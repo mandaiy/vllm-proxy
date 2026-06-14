@@ -3,8 +3,8 @@ help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; BEGIN {print "\nUsage: make [command]\n"} {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: start
-start: ## Starts server (uvicorn main:app --host 0.0.0.0 --port 8000)
-	uv run uvicorn main:app --host 0.0.0.0 --port 8000
+start: ## Starts server (uvicorn vllm_proxy.server:app --host 0.0.0.0 --port 8000)
+	uv run uvicorn vllm_proxy.server:app --host 0.0.0.0 --port 8000
 
 .PHONY: format
 format:
@@ -18,7 +18,7 @@ lint:
 
 .PHONY: type-check
 type-check:
-	@uv run pyright scripts/
+	@uv run pyright src/
 
 .PHONY: test
 test:

@@ -11,6 +11,16 @@ dependencies = [
     "uvicorn>=0.48.0",
 ]
 
+[project.scripts]
+vllm-proxy = "vllm_proxy.server:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [dependency-groups]
 dev = [
     "pyright>=1.1.410",
@@ -20,7 +30,7 @@ dev = [
 
 [tool.mypy]
 python_version = "3.13"
-files = ["main.py"]
+files = ["src"]
 namespace_packages = true
 explicit_package_bases = true
 ignore_missing_imports = true
